@@ -12,38 +12,40 @@ import mate.academy.service.impl.ProductServiceImpl;
 
 public class Injector {
     private static final Injector injector = new Injector();
-    private final Map<Class<?>, Class<?>> implementations = new HashMap<>();
-
-    public Injector() {
-        implementations.put(FileReaderService.class, FileReaderServiceImpl.class);
-        implementations.put(ProductParser.class, ProductParserImpl.class);
-        implementations.put(ProductService.class, ProductServiceImpl.class);
-    }
+    private final Map<Class<?>, Class<?>> implementations = Map.of(
+            FileReaderService.class, FileReaderServiceImpl.class,
+            ProductParser.class, ProductParserImpl.class,
+            ProductService.class, ProductServiceImpl.class
+    );
+    private final Map<Class<?>, Object> instances = new HashMap<>();
 
     public static Injector getInjector() {
         return injector;
     }
 
     public Object getInstance(Class<?> interfaceClazz) {
-        Class<?> clazz = implementations.get(interfaceClazz);
-        if (clazz == null) {
-            clazz = interfaceClazz;
-        }
+        Class<?> clazz = implementations.getOrDefault(interfaceClazz, interfaceClazz);
+
         if (!clazz.isAnnotationPresent(Component.class)) {
             throw new RuntimeException("Injection failed: " + clazz.getName()
                     + " is not a component");
         }
+
+        if (instances.containsKey(clazz)) {
+            return instances.get(clazz);
+        }
+
         Object instance = createInstance(clazz);
-        Field[] fields = clazz.getDeclaredFields();
-        for (Field field : fields) {
+        instances.put(clazz, instance);
+
+        for (Field field : clazz.getDeclaredFields()) {
             if (field.isAnnotationPresent(Inject.class)) {
                 Object fieldInstance = getInstance(field.getType());
                 field.setAccessible(true);
                 try {
                     field.set(instance, fieldInstance);
                 } catch (IllegalAccessException e) {
-                    throw new RuntimeException("Can't fill the field "
-                            + field.getName(), e);
+                    throw new RuntimeException("Can't fill the field " + field.getName(), e);
                 }
             }
         }
@@ -53,7 +55,7 @@ public class Injector {
     private Object createInstance(Class<?> clazz) {
         try {
             return clazz.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
+        } catch (ReflectiveOperationException e) {
             throw new RuntimeException("Can't create instance of " + clazz.getName(), e);
         }
     }
